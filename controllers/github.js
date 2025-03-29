@@ -1,45 +1,31 @@
 const axios = require("axios");
 const QRCode = require("qrcode");
+const Player = require("../models/player.js");
+const { incrementPlayerCount, getPlayerRank } = require("../utils/rankingUtils.js");
 require("dotenv").config();
 
 async function fetchGitHubData(username) {
     try {
         const headers = { Authorization: `Bearer ${process.env.TOKEN}` };
-        let userData = {};
-        let reposData = [];
-        let gistsData = [];
-        let eventsData = [];
 
-        // Fetch User Profile
-        const userResponse = await axios.get(`https://api.github.com/users/${username}`, { headers });
-        userData = userResponse.data;
+        // Fetch Profile, Repos, Gists, Events
+        const [userResponse, reposResponse, gistsResponse, eventsResponse] = await Promise.all([
+            axios.get(`https://api.github.com/users/${username}`, { headers }),
+            axios.get(`https://api.github.com/users/${username}/repos`, { headers }),
+            axios.get(`https://api.github.com/users/${username}/gists`, { headers }),
+            axios.get(`https://api.github.com/users/${username}/events/public`, { headers }).catch(() => ({ data: [] }))
+        ]);
 
-        // Fetch Repositories
-        const reposResponse = await axios.get(`https://api.github.com/users/${username}/repos`, { headers });
-        reposData = reposResponse.data;
-
-        // Fetch Public Gists
-        const gistsResponse = await axios.get(`https://api.github.com/users/${username}/gists`, { headers });
-        gistsData = gistsResponse.data;
-
-        // Fetch Public Events
-        try {
-            const eventsResponse = await axios.get(`https://api.github.com/users/${username}/events/public`, { headers });
-            eventsData = eventsResponse.data;
-        } catch (err) {
-            console.warn("⚠️ Failed to fetch user events.");
-        }
+        const userData = userResponse.data;
+        const reposData = reposResponse.data;
+        const gistsData = gistsResponse.data;
+        const eventsData = eventsResponse.data || [];
 
         // 🔹 Analyze Repositories
         const repoCount = reposData.length;
         let languageSet = new Set();
-        let totalStars = 0;
-        let totalForks = 0;
-        let forkedRepos = 0;
-        let totalIssuesOpened = 0;
-        let totalIssuesClosed = 0;
-        let totalPRsMerged = 0;
-        let contributionsToTopRepos = 0;
+        let totalStars = 0, totalForks = 0, forkedRepos = 0;
+        let totalIssuesOpened = 0, totalIssuesClosed = 0, totalPRsMerged = 0, contributionsToTopRepos = 0;
 
         // Top 3 Starred Repos
         const topRepos = reposData
@@ -50,100 +36,82 @@ async function fetchGitHubData(username) {
                 totalForks += repo.forks_count || 0;
                 if (repo.language) languageSet.add(repo.language);
                 if (repo.fork) forkedRepos++;
-
-                return {
-                    name: repo.name,
-                    stars: repo.stargazers_count || 0,
-                    forks: repo.forks_count || 0,
-                    url: repo.html_url
-                };
+                return { name: repo.name, stars: repo.stargazers_count, forks: repo.forks_count, url: repo.html_url };
             });
 
         // Analyze Events
         eventsData.forEach(event => {
             if (event.type === "IssuesEvent" && event.payload.action === "opened") totalIssuesOpened++;
             if (event.type === "IssuesEvent" && event.payload.action === "closed") totalIssuesClosed++;
-            if (event.type === "PullRequestEvent" && event.payload.action === "closed" && event.payload.pull_request.merged) {
-                totalPRsMerged++;
-            }
+            if (event.type === "PullRequestEvent" && event.payload.action === "closed" && event.payload.pull_request.merged) totalPRsMerged++;
         });
 
         // Contribution to Top Repos
         for (let repo of topRepos) {
             try {
                 const contributorsResponse = await axios.get(`https://api.github.com/repos/${username}/${repo.name}/contributors`, { headers });
-                const contributors = contributorsResponse.data;
-
-                if (contributors.some(contributor => contributor.login === username)) {
+                if (contributorsResponse.data.some(contributor => contributor.login === username)) {
                     contributionsToTopRepos += 50;
                 }
-            } catch (err) {
-                console.warn(`⚠️ Failed to check contributions for ${repo.name}`);
-            }
+            } catch (err) {}
         }
 
         // Account Age
         const accountAge = new Date().getFullYear() - new Date(userData.created_at).getFullYear();
         const uniqueLanguages = languageSet.size;
 
-        // 🏆 GitHub Score Calculation
-        let totalScore =
-            (repoCount * 2 > 100 ? 100 : repoCount * 2) +
-            (forkedRepos * 1 > 50 ? 50 : forkedRepos * 1) +
-            (totalStars * 5 > 500 ? 500 : totalStars * 5) +
-            (totalForks * 3 > 300 ? 300 : totalForks * 3) +
-            (totalIssuesOpened * 2 > 100 ? 100 : totalIssuesOpened * 2) +
-            (totalIssuesClosed * 3 > 150 ? 150 : totalIssuesClosed * 3) +
-            (totalPRsMerged * 10 > 500 ? 500 : totalPRsMerged * 10) +
-            (userData.followers * 3 > 500 ? 500 : userData.followers * 3) +
-            (accountAge * 5 > 50 ? 50 : accountAge * 5) +
-            (uniqueLanguages * 5 > 100 ? 100 : uniqueLanguages * 5) +
-            (contributionsToTopRepos > 500 ? 500 : contributionsToTopRepos);
+        // 🎯 **GitHub Problem-Solving Score**
+        const problemSolvingScore = 
+            (totalIssuesOpened * 2) + 
+            (totalIssuesClosed * 3) + 
+            (totalPRsMerged * 10) +
+            (totalStars * 5) + 
+            (totalForks * 3);
 
-        return {
-            profile: {
-                name: userData.name || null,
-                bio: userData.bio || null,
-                email: userData.email || null
-            },
-            account_stats: {
-                total_public_repos: userData.public_repos,
-                total_public_gists: gistsData.length,
-                followers: userData.followers,
-                following: userData.following,
-                account_created_at: userData.created_at,
-                total_issues_opened: totalIssuesOpened,
-                total_issues_closed: totalIssuesClosed,
-                total_prs_merged: totalPRsMerged
-            },
-            repository_analysis: {
-                total_repositories: repoCount,
-                total_stars: totalStars,
-                programming_languages_used: [...languageSet],
-                top_3_starred_repositories: topRepos
-            },
-            github_score: totalScore
+        // 🎯 **Overall Score Calculation** (Weighted)
+        const overallScore = Math.round(
+            (problemSolvingScore * 0.7) +  // 70% weight to problem-solving
+            (userData.followers * 3) +      // Engagement boost
+            (contributionsToTopRepos) +    // Contributions to top repos
+            (accountAge * 5) +             // Account longevity
+            (uniqueLanguages * 5)          // Multilingual diversity
+        );
+
+        // ✅ Store Player in MongoDB
+        const existingPlayer = await Player.findOne({ playerId: username, platform: "GitHub" });
+        if (!existingPlayer) await incrementPlayerCount("GitHub");
+
+        const player = await Player.findOneAndUpdate(
+            { playerId: username, platform: "GitHub" },
+            { name: username, platform: "GitHub", score: overallScore },
+            { upsert: true, new: true }
+        );
+
+        // ✅ Get Rank & Total Players
+        const ranking = await getPlayerRank(username, "GitHub", overallScore);
+
+        return { 
+            player,
+            problemSolvingScore: Math.round(problemSolvingScore),  // Separate problem-solving score
+            overallScore,  // Final GitHub score
+            ranking
         };
+
     } catch (error) {
-        console.error("Error fetching GitHub data:", error.response ? error.response.data : error.message);
+        console.error("Error fetching GitHub data:", error.message);
         return { error: "Failed to fetch GitHub data." };
     }
 }
 
-// ✅ Controller Function with QR Code
+// ✅ Controller Function to Get GitHub Profile
 async function getGitHubProfile(req, res) {
     const username = req.params.username;
     const data = await fetchGitHubData(username);
 
-    if (data.error) {
-        return res.status(500).json(data);
-    }
+    if (data.error) return res.status(500).json(data);
 
     try {
-        // ✅ Generate QR Code with user data
-        const qrCodeData = await QRCode.toDataURL(JSON.stringify(data));
-
-        // ✅ Attach QR Code to response
+        const qrCodeData = await QRCode.toDataURL(`https://github.com/${username}`);
         res.json({ ...data, qrCode: qrCodeData });
     } catch (qrError) {
         console.error("QR Code generation failed:", qrError);

@@ -1,7 +1,8 @@
 const axios = require("axios");
 const QRCode = require("qrcode");
+const Player = require("../models/player.js");
+const { incrementPlayerCount, getPlayerRank } = require("../utils/rankingUtils.js");
 
-// ✅ Fetch Codeforces Data
 async function fetchCodeforcesData(username) {
   try {
     // Fetch user profile, contests, and submissions
@@ -33,10 +34,7 @@ async function fetchCodeforcesData(username) {
     let repetitionRatio = totalSolved > 0 ? maxSolvedCategory / totalSolved : 0;
 
     // ✅ Diversity Factor: Penalize too many "easy" problems
-    let diversityFactor = 1;
-    if (repetitionRatio > 0.5) {
-      diversityFactor = 1 - (repetitionRatio - 0.5);
-    }
+    let diversityFactor = repetitionRatio > 0.5 ? 1 - (repetitionRatio - 0.5) : 1;
 
     // ✅ Specialization Bonus: Reward medium/hard problem solvers
     let specializationBonus = 1;
@@ -48,32 +46,40 @@ async function fetchCodeforcesData(username) {
       }
     }
 
-    // ✅ Score Calculation
-    let contestScore = (profile.rating || 1000) / 10;
-    let problemSolvingScore = totalSolved * 10 * diversityFactor;
+    // 🎯 **Problem-Solving Score Calculation**
+    let problemSolvingScore = Math.round(totalSolved * 10 * diversityFactor);
 
-    let finalScore = Math.round((problemSolvingScore * 0.6 + contestScore * 0.4) * specializationBonus);
+    // 🎯 **Overall Score Calculation**
+    let contestScore = (profile.rating || 1000) / 10; // Scaled down contest rating
+    let overallScore = Math.round((problemSolvingScore * 0.6 + contestScore * 0.4) * specializationBonus);
+
+    // ✅ Store player in MongoDB
+    const existingPlayer = await Player.findOne({ playerId: username, platform: "Codeforces" });
+    if (!existingPlayer) await incrementPlayerCount("Codeforces");
+
+    const player = await Player.findOneAndUpdate(
+      { playerId: username, platform: "Codeforces" },
+      { name: username, platform: "Codeforces", score: overallScore },
+      { upsert: true, new: true }
+    );
+
+    // ✅ Get Rank & Total Players
+    const ranking = await getPlayerRank(username, "Codeforces", overallScore);
 
     return {
-      username: profile.handle,
-      rating: profile.rating || "Unrated",
-      maxRating: profile.maxRating || "N/A",
-      contestsParticipated: contests.length,
-      lastContest: contests.length > 0 ? contests[contests.length - 1].contestName : "None",
-      totalSolved,
-      difficultyStats: difficultyCounts,
-      diversityFactor: diversityFactor.toFixed(2),
-      specializationBonus: specializationBonus.toFixed(2),
-      finalProfileScore: finalScore
+      player,
+      problemSolvingScore,
+      overallScore,
+      ranking
     };
 
   } catch (error) {
     console.error("Error fetching Codeforces data:", error.message);
-    return { error: "Failed to fetch Codeforces data" };
+    return { error: "Failed to fetch Codeforces data." };
   }
 }
 
-// ✅ Controller Function with QR Code Generation
+// ✅ Controller Function to Get Codeforces Profile
 const getCodeforcesUser = async (req, res) => {
   const username = req.params.username;
 
@@ -86,8 +92,8 @@ const getCodeforcesUser = async (req, res) => {
   }
 
   try {
-    // ✅ Generate QR Code with user data
-    const qrCodeData = await QRCode.toDataURL(JSON.stringify(codeforcesData));
+    // ✅ Generate QR Code with user profile link
+    const qrCodeData = await QRCode.toDataURL(`https://codeforces.com/profile/${username}`);
 
     // ✅ Attach QR Code to response
     res.json({ ...codeforcesData, qrCode: qrCodeData });

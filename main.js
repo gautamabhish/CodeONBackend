@@ -2,6 +2,15 @@ const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
 require('dotenv').config();
+const mongoose = require("mongoose");
+
+mongoose.connect(process.env.MONGODBURI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log("✅ Connected to MongoDB Atlas"))
+.catch(err => console.error("❌ MongoDB Connection Error:", err));
+
 const app = express();
 const PORT = process.env.PORT || 6969;
 
