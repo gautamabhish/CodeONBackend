@@ -17,11 +17,13 @@ const app = express();
 const PORT = process.env.PORT || 6969;
 
 const corsOptions = {
-  origin: ["https://code-on-one.vercel.app/"], // Replace with your frontend's domain
-  methods: "GET,POST",
+  origin: "https://code-on-one.vercel.app", // Ensure it's a string, not an array
+  methods: "GET, POST, OPTIONS",
+  allowedHeaders: "Content-Type, Authorization",
+  credentials: true, // Allow cookies if needed
 };
-
 app.use(cors(corsOptions));
+
 app.use(express.json());
 
 const {getCodeforcesUser} = require('./controllers/codeforces.js');
