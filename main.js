@@ -16,6 +16,11 @@ mongoose.connect(process.env.MONGODBURI, {
 const app = express();
 const PORT = process.env.PORT || 6969;
 
+const corsOptions = {
+  origin: ["https://code-on-one.vercel.app/"], // Replace with your frontend's domain
+  methods: "GET,POST",
+};
+
 app.use(cors());
 app.use(express.json());
 
