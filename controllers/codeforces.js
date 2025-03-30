@@ -2,6 +2,7 @@ const axios = require("axios");
 const QRCode = require("qrcode");
 const Player = require("../models/player.js");
 const { incrementPlayerCount, getPlayerRank } = require("../utils/rankingUtils.js");
+const getCardColor = require("../utils/colorDecider.js");
 
 async function fetchCodeforcesData(username) {
   try {
@@ -64,7 +65,7 @@ async function fetchCodeforcesData(username) {
     );
 
     // ✅ Get Rank & Total Players
-    const ranking = await getPlayerRank(username, "Codeforces", overallScore);
+    const ranking = await getPlayerRank( "Codeforces", overallScore);
 
     return {
       player,
@@ -85,18 +86,24 @@ const getCodeforcesUser = async (req, res) => {
 
   if (username === "favicon.ico") return res.status(204).end();
 
-  const codeforcesData = await fetchCodeforcesData(username);
+  const data = await fetchCodeforcesData(username);
 
-  if (codeforcesData.error) {
-    return res.status(500).json(codeforcesData);
+  if (data.error) {
+    return res.status(500).json(data);
   }
 
   try {
     // ✅ Generate QR Code with user profile link
-    const qrCodeData = await QRCode.toDataURL(`https://codeforces.com/profile/${username}`);
+    const {gradient,firstColor} = getCardColor(data.ranking.rank,data.ranking.totalPlayers)
+    const qrCodeData = await QRCode.toDataURL(`https://codeforces.com/profile/${username}`,{
+      color: {
+        dark:firstColor ,  // QR code color (black)
+        light: "#00000000" // Transparent background
+      }
+    });
 
     // ✅ Attach QR Code to response
-    res.json({ ...codeforcesData, qrCode: qrCodeData });
+    res.json({ ...data, qrCode: qrCodeData ,color:gradient});
   } catch (qrError) {
     console.error("QR Code generation failed:", qrError);
     res.status(500).json({ error: "Failed to generate QR Code" });

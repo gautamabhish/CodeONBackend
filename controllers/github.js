@@ -3,7 +3,7 @@ const QRCode = require("qrcode");
 const Player = require("../models/player.js");
 const { incrementPlayerCount, getPlayerRank } = require("../utils/rankingUtils.js");
 require("dotenv").config();
-
+const getCardColor = require('../utils/colorDecider.js')
 async function fetchGitHubData(username) {
     try {
         const headers = { Authorization: `Bearer ${process.env.TOKEN}` };
@@ -88,7 +88,7 @@ async function fetchGitHubData(username) {
         );
 
         // ✅ Get Rank & Total Players
-        const ranking = await getPlayerRank(username, "GitHub", overallScore);
+        const ranking = await getPlayerRank( "GitHub", overallScore);
 
         return { 
             player,
@@ -111,8 +111,14 @@ async function getGitHubProfile(req, res) {
     if (data.error) return res.status(500).json(data);
 
     try {
-        const qrCodeData = await QRCode.toDataURL(`https://github.com/${username}`);
-        res.json({ ...data, qrCode: qrCodeData });
+        const {gradient , firstColor} = getCardColor(data.ranking.rank,data.ranking.totalPlayers);
+        const qrCodeData = await QRCode.toDataURL(`https://github.com/${username}`,{
+            color: {
+              dark:firstColor ,  // QR code color (black)
+              light: "#00000000" // Transparent background
+            }
+          });
+        res.json({ ...data, qrCode: qrCodeData ,color:gradient});
     } catch (qrError) {
         console.error("QR Code generation failed:", qrError);
         res.status(500).json({ error: "Failed to generate QR Code" });

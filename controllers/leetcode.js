@@ -2,7 +2,7 @@ const axios = require("axios");
 const QRCode = require("qrcode");
 const Player = require("../models/player.js");
 const { incrementPlayerCount, getPlayerRank } = require("../utils/rankingUtils.js");
-
+const getCardColor = require('../utils/colorDecider.js')
 async function fetchLeetCodeData(username) {
     try {
       const query = {
@@ -107,7 +107,7 @@ async function fetchLeetCodeData(username) {
       );
   
       // ✅ Get rank & total players
-      const ranking = await getPlayerRank(username, "LeetCode", overallScore);
+      const ranking = await getPlayerRank( "LeetCode", overallScore);
   
       return { 
         player,
@@ -128,8 +128,14 @@ async function getLeetCodeProfile(req, res) {
   if (data.error) return res.status(500).json(data);
 
   try {
-    const qrCodeData = await QRCode.toDataURL(`https://leetcode.com/${username}`);
-    res.json({ ...data, qrCode: qrCodeData });
+    const {gradient,firstColor} = getCardColor(data.ranking.rank,data.ranking.totalPlayers);
+    const qrCodeData = await QRCode.toDataURL(`https://leetcode.com/${username}`,{
+      color: {
+        dark:firstColor ,  // QR code color (black)
+        light: "#00000000" // Transparent background
+      }
+    });
+    res.json({ ...data, qrCode: qrCodeData ,color:gradient});
   } catch (qrError) {
     console.error("QR Code generation failed:", qrError);
     res.status(500).json({ error: "Failed to generate QR Code" });
