@@ -135,7 +135,7 @@ async function getLeetCodeProfile(req, res) {
         light: "#00000000" // Transparent background
       }
     });
-    res.json({ ...data, qrCode: qrCodeData ,color:gradient});
+    res.status(200).json({ ...data, qrCode: qrCodeData ,color:gradient});
   } catch (qrError) {
     console.error("QR Code generation failed:", qrError);
     res.status(500).json({ error: "Failed to generate QR Code" });

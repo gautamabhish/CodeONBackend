@@ -103,7 +103,7 @@ const getCodeforcesUser = async (req, res) => {
     });
 
     // ✅ Attach QR Code to response
-    res.json({ ...data, qrCode: qrCodeData ,color:gradient});
+    res.status(200).json({ ...data, qrCode: qrCodeData ,color:gradient});
   } catch (qrError) {
     console.error("QR Code generation failed:", qrError);
     res.status(500).json({ error: "Failed to generate QR Code" });
