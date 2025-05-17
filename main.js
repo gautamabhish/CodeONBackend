@@ -16,8 +16,15 @@ mongoose.connect(process.env.MONGODBURI, {
 const app = express();
 const PORT = process.env.PORT || 6969;
 
+const whitelist = ["https://code-on-one.vercel.app","https://abhishek-gautam-dev.vercel.app"]
 const corsOptions = {
-  origin: "https://code-on-one.vercel.app", // Ensure it's a string, not an array
+  origin: function (origin, callback) {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },// Ensure it's a string, not an array
   methods: "GET, POST, OPTIONS",
   allowedHeaders: "Content-Type, Authorization",
   credentials: true, // Allow cookies if needed
